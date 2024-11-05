@@ -15,7 +15,7 @@ def clear_messages_file(file_path="messages.txt"):
 
 def save_message_to_file(message, file_path="messages.txt"):
     timestamp = str(int(time.time() * 1000))
-    message_with_id = f"{timestamp}|{message.replace('\n', ' ').strip()}"
+    message_with_id = f"{timestamp}|{message.replace(chr(10), ' ').strip()}"
     with open(file_path, "a", encoding="utf-8") as file:
         file.write(message_with_id + "\n")
     return timestamp
@@ -44,3 +44,4 @@ def remove_message_from_file(timestamp: str, file_path: str = "messages.txt"):
                 file.write(msg + "\n")
     else:
         print(f"Message with timestamp {timestamp} not found in file.")
+

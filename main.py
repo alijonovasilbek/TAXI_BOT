@@ -6,6 +6,9 @@ from aiogram.client.bot import DefaultBotProperties
 from config import BOT_TOKEN
 from bot_handler import router
 
+
+
+
 async def main():
     logging.basicConfig(level=logging.INFO)
     dp = Dispatcher()

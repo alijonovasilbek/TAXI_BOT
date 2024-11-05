@@ -1,4 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+# from  bot_handler import  bot_active
+
+bot_active=True
 
 def get_admin_buttons(message_id: int, user_chat_id: int) -> InlineKeyboardMarkup:
     # Admin buttons with approval options and chat link
@@ -25,6 +28,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 def get_main_control_buttons(current_flow: str) -> ReplyKeyboardMarkup:
     # Set button text with appropriate emojis for the current flow
     if current_flow == "admin":
+
         toggle_text = "🫅 Jo'natish Admin"  # Emoji indicates sending to Admin
     else:
         toggle_text = "🚗 Jo'natish haydovchilarga"  # Emoji indicates sending to Drivers
@@ -34,9 +38,16 @@ def get_main_control_buttons(current_flow: str) -> ReplyKeyboardMarkup:
     qabulqilish_all_button = KeyboardButton(text="hammasini qabulqilish")
     radqilish_all_button = KeyboardButton(text="hammasini radqilish")
 
+    if bot_active:
+        status_button = KeyboardButton(text="🛑 To'xtatish")  # Botni to'xtatish
+    else:
+        status_button = KeyboardButton(text="▶️ Faollashtirish")  # Botni faollashtirish
+
     # Return keyboard layout
     return ReplyKeyboardMarkup(
-        keyboard=[[toggle_button], [qabulqilish_all_button, radqilish_all_button]],
+        keyboard=[[toggle_button,status_button], [qabulqilish_all_button, radqilish_all_button]],
         resize_keyboard=True,
         one_time_keyboard=False
     )
+
+

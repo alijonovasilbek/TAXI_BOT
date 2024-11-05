@@ -18,3 +18,6 @@ GROUP_IDS1 = int(os.getenv('GROUP_IDS1'))
 GROUP_IDS2 = int(os.getenv('GROUP_IDS2'))
 
 GROUP_IDS = [GROUP_IDS1, GROUP_IDS2]
+# config.py
+# bot_active = True
+
