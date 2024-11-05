@@ -1,7 +1,7 @@
 from aiogram import Router, types, F, Bot
 from config import *
 from utils import *
-from keyboards import get_admin_buttons,get_driver_buttons, get_main_control_buttons
+from keyboards import get_admin_buttons, get_driver_buttons, get_main_control_buttons
 import os
 from aiogram.filters import Command
 from config import BOT_TOKEN
@@ -14,12 +14,9 @@ import os
 
 from dotenv import load_dotenv
 
-
 load_dotenv()  # Load environment variables from .env file
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-
-
 
 router = Router()
 bot = Bot(
@@ -34,42 +31,54 @@ admin_authenticated = False
 message_id_tracker = {}
 last_response_time = {}
 RESPONSE_THRESHOLD = 5
+BUFFER_TIMEOUT = 5
+bot_active = True  # Indicates if the bot is currently active
+is_logged_in = False  # Tracks admin login status
 
-# Buffer for collecting messages per user
+# Message buffers and timers
 message_buffer = {}
 message_timers = {}
-BUFFER_TIMEOUT = 5
-
-is_logged_in=False
 
 
-
-
-# Login command handler
+# Login handler
 @router.message(Command("login"))
 async def login_admin(message: types.Message):
     global is_logged_in
-
-    # Ensure the login command is only used in private chat
+    # Ensure command is used only in private chat
     if message.chat.type != "private":
-        await message.reply("Iltimos, bot bilan shaxsiy suhbatda ushbu buyruqdan foydalaning.")
+        await message.reply("Please use this command in a private chat with the bot.")
         return
-
-    # Extract password from the command
+    # Get password from the command text
     password_provided = message.text.split(" ", 1)[1] if len(message.text.split()) > 1 else None
-
-    # Check if the password is correct
     if password_provided == ADMIN_PASSWORD:
         is_logged_in = True
-        await message.reply("Kirish muvaffaqiyatli!")
+        await message.reply("Successfully logged in!")
         await message.answer(
-            f"Hozirda xabarlar yuboriladi: {message_destination.capitalize()} ga",
-            reply_markup=get_main_control_buttons(message_destination)
+            f"Messages will currently be sent to: {message_destination.capitalize()}",
+            reply_markup=get_main_control_buttons(bot_active, message_destination)
         )
     else:
-        await message.reply("Xato parol. Iltimos, qaytadan urinib ko‘ring.")
+        await message.reply("Incorrect password. Please try again.")
 
 
+@router.message(F.text == "🛑 To'xtatish")
+async def stop_bot(message: types.Message):
+    global bot_active
+    bot_active = False
+    await message.answer(
+        "Bot to'xtatildi",
+        reply_markup=get_main_control_buttons(message_destination, bot_active)
+    )
+
+
+@router.message(F.text == "▶️ Faollashtirish")
+async def start_bot(message: types.Message):
+    global bot_active
+    bot_active = True
+    await message.answer(
+        "Bot aktivlashtirildi",
+        reply_markup=get_main_control_buttons(message_destination, bot_active)
+    )
 
 
 # Function to ensure only logged-in admin can access certain commands
@@ -81,44 +90,36 @@ async def admin_only(message: types.Message):
     return True
 
 
-
-
-
 async def flush_user_buffer(user_id, username, user_chat_id):
-    """Send buffered messages to the admin or drivers after timeout."""
-    # Combine messages without the 'ID' label for simplicity
+    global bot_active
+
+    if not bot_active:
+        return
     base_message = f"👤 {username}:\n" + "\n".join(message_buffer[user_id])
 
-    # Check the message destination and format accordingly
     if message_destination == "admin":
-        # Add "Chatga o'tish" link for admin chat using HTML
         combined_message = f"{base_message}\n\n<a href='tg://user?id={user_chat_id}'>👉Mijoz profiliga o'tish👈</a>"
 
-        # Save the message to file with a timestamp for tracking if destination is admin
         timestamp = save_message_to_file(combined_message)
 
-        # Send to admin chat with approval buttons and HTML formatting
         sent_message = await bot.send_message(
             ADMIN_CHAT_ID,
             combined_message,
             reply_markup=get_admin_buttons(timestamp, user_chat_id),
-            parse_mode="HTML"  # Use HTML to make the link clickable
+            parse_mode="HTML"
         )
         message_id_tracker[timestamp] = sent_message.message_id
 
     else:
-        # For drivers-only group, send the message without saving to file
         combined_message = f"{base_message}\n\n<a href='tg://user?id={user_chat_id}'>👉Mijoz profiliga o'tish👈</a>"
         await bot.send_message(
             haydovchilarga_ONLY_GROUP_ID,
             combined_message,
-            parse_mode="HTML"  # Use HTML to make the link clickable
+            parse_mode="HTML"
         )
 
-    # Clear the user's message buffer and timer
     del message_buffer[user_id]
     del message_timers[user_id]
-
 
 
 async def add_message_to_buffer(user_id, message_content, username, user_chat_id):
@@ -141,18 +142,26 @@ async def add_message_to_buffer(user_id, message_content, username, user_chat_id
     await flush_user_buffer(user_id, username, user_chat_id)
 
 
-
 @router.message(F.text.contains("Jo'natish"))
 async def toggle_flow(message: types.Message):
     global message_destination
+    if not bot_active:
+        await message.reply("Bot hozirda aktiv holarta emas Iltimos umi faollashtiring !")
+        return
+
+    # Toggle destination between "admin" and "haydovchilarga"
     if message_destination == "admin":
         message_destination = "haydovchilarga"
         toggle_text = "🚗 Jo'natish: Haydovchilar guruhiga"
     else:
         message_destination = "admin"
         toggle_text = "🫅 Jo'natish: Administratorga"
-    await message.answer(toggle_text, reply_markup=get_main_control_buttons(message_destination))
 
+    # Update the reply markup in the same message
+    await message.answer(
+        f"{toggle_text}",
+        reply_markup=get_main_control_buttons(message_destination, bot_active)
+    )
 
 
 @router.message(F.text == "hammasini qabulqilish")
@@ -193,8 +202,6 @@ async def qabulqilish_all_messages(message: types.Message):
     # Clear messages from file after sending to admin
     clear_messages_file(messages_file_path)
     await message.answer("Barcha xabarlar administratorga qabul qilindi.")
-
-
 
 
 @router.message(F.text == "hammasini radqilish")
@@ -250,14 +257,17 @@ async def radqilish_all_messages(message: types.Message):
     clear_messages_file(messages_file_path)
 
 
-
 @router.message()
 async def handle_message(message: types.Message):
-    # Agar bot faol bo'lmasa va xabar guruhda kelgan bo'lsa, hech narsa qilmaslik
+    # Check if the bot is active
+    if not bot_active:
+        return
+
     if message.chat.id == ADMIN_CHAT_ID:
         await message.reply("Bunday buyruq yo‘q")
-        await  message.delete()
+        await message.delete()
         return
+
     user_id = message.from_user.id
     name = f"{message.from_user.first_name}"
     message_content = f"💬 {message.text}"
@@ -267,12 +277,11 @@ async def handle_message(message: types.Message):
     current_time = time.time()
     if user_id not in last_response_time or (current_time - last_response_time[user_id] > RESPONSE_THRESHOLD):
         last_response_time[user_id] = current_time
-        await message.answer(f"✅ {message.from_user.first_name}\n🇺🇿Sizning so'rovingiz muvaffaqiyatli qabul qilindi!\n🇷🇺Ваш запрос успешно получен!")
+        await message.answer(
+            f"✅ {message.from_user.first_name}\n🇺🇿Sizning so'rovingiz muvaffaqiyatli qabul qilindi!\n🇷🇺Ваш запрос успешно получен!"
+        )
 
     await add_message_to_buffer(user_id, message_content, name, user_id)
-
-
-
 
 
 @router.callback_query(F.data.startswith(("qabulqilish", "radqilish")))
@@ -290,7 +299,8 @@ async def process_callback(callback_query: types.CallbackQuery):
         start_idx = message_content.find("?id=") + 4
         end_idx = message_content.find("'", start_idx)
         user_id = message_content[start_idx:end_idx].strip()
-    cleaned_message_content = re.sub(r"<a href='tg://user\?id=\d+'>👉Mijoz profiliga o'tish👈</a>", "", message_content).strip()
+    cleaned_message_content = re.sub(r"<a href='tg://user\?id=\d+'>👉Mijoz profiliga o'tish👈</a>", "",
+                                     message_content).strip()
     cleaned_message_content = re.sub(r"(💬)", r"\n\1", cleaned_message_content)
 
     if action == "qabulqilish":
@@ -298,7 +308,7 @@ async def process_callback(callback_query: types.CallbackQuery):
         remove_message_from_file(message_id, messages_file_path)
 
     elif action == "radqilish":
-        if user_id :
+        if user_id:
             cleaned_message_content += f"\n\n<a href=\"tg://user?id={user_id}\">👉Mijoz profiliga o'tish👈</a>"
 
         # Send to drivers-only group
@@ -318,10 +328,11 @@ async def process_callback(callback_query: types.CallbackQuery):
         except Exception as e:
             print(f"Failed to delete message: {e}")
 
-    # Attempt to edit the markup safely (removing the buttons)
     try:
-        await callback_query.message.edit_reply_markup(reply_markup=None)
+        await callback_query.message.edit_reply_markup(reply_markup=None)  # If you want to remove buttons
     except Exception as e:
         print(f"Failed to edit reply markup for message ID {callback_query.message.message_id}: {e}")
 
-
+        # If you want to set the buttons again based on the action taken
+    await callback_query.message.edit_reply_markup(
+        reply_markup=get_main_control_buttons(message_destination, bot_active))
